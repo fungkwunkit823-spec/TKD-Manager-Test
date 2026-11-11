@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TKD Manager｜私人管理系統</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f2f5fa;color:#172b4d;font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif}header{background:#173b73;color:#fff;padding:22px 18px}header h1{margin:0;font-size:26px}header small{opacity:.85}main{max-width:1000px;margin:24px auto;padding:0 16px}.panel{background:white;border-radius:14px;padding:22px;box-shadow:0 2px 12px #12274a12;margin-bottom:16px}h2{margin-top:0}label{display:block;margin:12px 0 5px;font-weight:600}input,select,textarea{font-size:16px;width:100%;padding:11px;border:1px solid #b8c5d8;border-radius:8px;font:inherit}button{min-height:44px;border:0;border-radius:8px;background:#173b73;color:white;padding:11px 17px;font:inherit;cursor:pointer}button:disabled{opacity:.55;cursor:wait}.secondary{background:#e7edf5;color:#173b73}.danger{background:#b42318}.toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.message{min-height:1.5em;color:#a12424}.ok{color:#17603a}.student{border-top:1px solid #e4e9f1;padding:14px 0;display:flex;justify-content:space-between;gap:12px;align-items:center}.student small{color:#53647a}.actions{display:flex;gap:8px;flex-wrap:wrap}.muted{color:#596b82;font-size:14px}[hidden]{display:none!important}@media(max-width:600px){.row{grid-template-columns:1fr}.student{align-items:flex-start;flex-direction:column}}
+.stat{padding:15px;border:1px solid #e4e9f1;border-radius:10px;display:flex;flex-direction:column;gap:6px}.stat strong{font-size:25px}.stat span{color:#596b82;font-size:14px}#resultCount{margin:12px 0 4px}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #4f8bff;outline-offset:2px}
+</style>
+</head>
+<body>
+<header><h1>🥋 TKD Manager</h1><small>私人跆拳道班行政管理系統</small></header>
+<main>
+<section id="setup" class="panel" hidden><h2>網站尚未完成設定</h2><p>請先在 index.html 填入 Supabase Project URL 及 Publishable key。</p></section>
+<section id="login" class="panel" hidden>
+<h2>管理員登入</h2><p class="muted">只供已獲授權管理員使用</p>
+<form id="loginForm"><label for="email">電郵地址</label><input id="email" type="email" autocomplete="username" required><label for="password">密碼</label><input id="password" type="password" autocomplete="current-password" required><p><button id="loginButton" type="submit">登入</button></p></form>
+<p id="loginMessage" class="message" role="status" aria-live="polite"></p><p class="muted">如出現網絡錯誤，請先確認 Safari 可連接 Supabase；請勿將密碼或金鑰傳送給任何人。</p>
+</section>
+<section id="app" hidden>
+<div class="panel toolbar"><div><strong>學生管理</strong><div class="muted" id="who"></div></div><button class="secondary" id="logoutButton">登出</button></div>
+<div class="panel"><h2 id="formTitle">新增學生</h2>
+<form id="studentForm"><div class="row"><div><label for="studentName">學生姓名 *</label><input id="studentName" required maxlength="100"></div><div><label for="className">班別</label><input id="className" maxlength="150" placeholder="例如：寶林星期五"></div><div><label for="fee">每月學費（HK$）</label><input id="fee" type="number" min="0" step="0.01" value="0" required></div><div><label for="enrollment">入學日期</label><input id="enrollment" type="date"></div><div><label for="status">狀態</label><select id="status"><option value="active">在讀</option><option value="inactive">停讀</option></select></div></div><label for="notes">備註</label><textarea id="notes" rows="2" maxlength="1000"></textarea><p class="actions"><button type="submit" id="saveButton">儲存學生</button><button type="button" class="secondary" id="cancelButton" hidden>取消修改</button></p></form>
+<p id="studentMessage" class="message" role="status"></p><p class="muted">安全審核期間暫停刪除功能。登入成功不代表已獲授權，資料讀寫仍須由 Supabase RLS 保護。</p></div>
+<div class="panel" id="overview"><h2>管理總覽（學生）</h2><div class="row"><div class="stat"><strong id="totalStudents">—</strong><span>學生總數</span></div><div class="stat"><strong id="activeStudents">—</strong><span>在讀學生</span></div><div class="stat"><strong id="inactiveStudents">—</strong><span>停讀學生</span></div><div class="stat"><strong id="totalClasses">—</strong><span>已記錄班別數</span></div></div><p class="muted">以上只統計目前可讀取嘅學生資料；並非學費收入或已付款數字。</p></div>
+<div class="panel"><div class="toolbar"><h2>學生名單 <span id="count"></span></h2><div class="actions"><button id="refreshButton" class="secondary">重新整理</button><button id="exportButton" class="secondary" type="button">匯出 CSV</button></div></div><div class="row"><div><label for="searchStudents">搜尋學生或班別</label><input id="searchStudents" type="search" placeholder="輸入姓名或班別"></div><div><label for="filterStatus">篩選狀態</label><select id="filterStatus"><option value="all">全部</option><option value="active">在讀</option><option value="inactive">停讀</option></select></div></div><p id="resultCount" class="muted" role="status"></p><p id="listMessage" class="message" role="status" aria-live="polite"></p><div id="studentList">正在載入…</div></div>
+</section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.0"></script>
+<script>
+// 只填入 Project URL 及 Publishable key（或舊版 anon key）。
+// 絕對不要填入 service_role、sb_secret 或資料庫密碼。
+const SUPABASE_URL = 'https://oktbmlxjcofzscpwkokc.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_-fDZvFBBaPwQUKsYwKkJtA_AgmwUpys';
+
+const ADMIN_UID = 'd670a2c2-4491-4519-9290-f5ee3314d084';
+const REQUEST_TIMEOUT_MS = 20000;
+const $ = id => document.getElementById(id);
+const timeout = (promise, ms=REQUEST_TIMEOUT_MS) => Promise.race([
+ Promise.resolve(promise), new Promise((_,reject)=>setTimeout(()=>reject(new Error('連線逾時，請檢查網絡後重新整理確認結果。')),ms))
+]);
+const errorText = err => /fetch|network|load failed|網絡|連線|timeout|逾時/i.test(String(err?.message||err))
+ ? '網絡連線失敗或逾時。請檢查網絡後重試。' : String(err?.message||err);
+let loadingStudents=false, savingStudent=false, signingIn=false;
+
+const configured = /^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/i.test(SUPABASE_URL) &&
+  SUPABASE_PUBLISHABLE_KEY.startsWith('sb_publishable_') && SUPABASE_PUBLISHABLE_KEY.length > 25;
+let db, currentUser = null, students = [], editingId = null;
+const show = id => { for (const name of ['setup','login','app']) $(name).hidden = name !== id; };
+const say = (id, text, ok=false) => { $(id).textContent=text; $(id).className=ok?'message ok':'message'; };
+function resetForm(){ editingId=null; $('studentForm').reset(); $('fee').value='0'; $('formTitle').textContent='新增學生'; $('cancelButton').hidden=true; }
+function displayStudents(){
+ const list=$('studentList'); list.replaceChildren(); $('count').textContent=`(${students.length})`;
+ const q=$('searchStudents').value.trim().toLocaleLowerCase('zh-Hant');
+ const f=$('filterStatus').value;
+ const filtered=students.filter(s=>(f==='all'||s.status===f)&&(!q||(s.student_name||'').toLocaleLowerCase('zh-Hant').includes(q)||(s.class_name||'').toLocaleLowerCase('zh-Hant').includes(q)));
+ $('resultCount').textContent=`顯示 ${filtered.length} 位／共 ${students.length} 位學生`;
+ $('totalStudents').textContent=students.length;
+ $('activeStudents').textContent=students.filter(s=>s.status==='active').length;
+ $('inactiveStudents').textContent=students.filter(s=>s.status==='inactive').length;
+ $('totalClasses').textContent=new Set(students.map(s=>(s.class_name||'').trim()).filter(Boolean)).size;
+ if(!filtered.length){const p=document.createElement('p');p.className='muted';p.textContent=students.length?'沒有符合搜尋條件的學生。':'暫時未有可讀取的學生資料。';list.append(p);return;}
+ for(const s of filtered){
+  const wrap=document.createElement('div');wrap.className='student';
+  const info=document.createElement('div');const strong=document.createElement('strong');strong.textContent=s.student_name;
+  const detail=document.createElement('small');detail.textContent=`${s.class_name||'未指定班別'} · HK$${Number(s.monthly_fee).toFixed(2)} · ${s.status==='active'?'在讀':'停讀'}`;
+  info.append(strong,document.createElement('br'),detail);
+  const actions=document.createElement('div');actions.className='actions';
+  const edit=document.createElement('button');edit.className='secondary';edit.textContent='修改';edit.onclick=()=>{
+   editingId=s.id;$('studentName').value=s.student_name;$('className').value=s.class_name||'';$('fee').value=s.monthly_fee;$('enrollment').value=s.enrollment_date||'';$('status').value=s.status;$('notes').value=s.notes||'';$('formTitle').textContent='修改學生';$('cancelButton').hidden=false;window.scrollTo({top:0,behavior:'smooth'});
+  };
+  const del=document.createElement('button');del.className='danger';del.textContent='刪除';del.disabled=true;del.title='安全審核期間暫停刪除學生';
+  actions.append(edit,del);wrap.append(info,actions);list.append(wrap);
+ }
+}
+async function loadStudents(){
+ if(loadingStudents || !currentUser) return;
+ loadingStudents=true; $('refreshButton').disabled=true; $('exportButton').disabled=true;
+ $('studentList').textContent='正在載入…';
+ try {
+  const all=[]; const pageSize=500;
+  for(let offset=0;;offset+=pageSize){
+   const {data,error}=await timeout(db.from('students').select('id,student_name,class_name,monthly_fee,enrollment_date,status,notes').order('student_name').order('id').range(offset,offset+pageSize-1));
+   if(error) throw error;
+   all.push(...(data||[]));
+   if(!data || data.length<pageSize) break;
+  }
+  students=all; displayStudents(); say('listMessage','資料已更新。',true);
+ } catch(err){
+  // Never export stale or partial data after a failed refresh.
+  students=[]; ['count','totalStudents','activeStudents','inactiveStudents','totalClasses','resultCount'].forEach(id=>$(id).textContent='—');
+  $('studentList').textContent='讀取失敗：'+errorText(err);
+  say('listMessage','資料未完整載入，已暫停 CSV 匯出。');
+ } finally {loadingStudents=false;$('refreshButton').disabled=false;$('exportButton').disabled=students.length===0;}
+}
+async function refreshAuth(){
+ const {data,error}=await timeout(db.auth.getUser());
+ if(error || !data?.user){currentUser=null;students=[];show('login');if(error) say('loginMessage','無法驗證登入狀態：'+errorText(error));return;}
+ if(data.user.id!==ADMIN_UID){
+  currentUser=null;students=[];show('login');say('loginMessage','此帳戶未獲管理員授權，請使用指定管理員帳戶。');
+  await timeout(db.auth.signOut()).catch(()=>{}); return;
+ }
+ currentUser=data.user;$('who').textContent=currentUser.email||'已登入';show('app');await loadStudents();
+}
+if(!configured){show('setup');}
+else if(!window.supabase){show('setup');$('setup').querySelector('p').textContent='無法載入 Supabase 程式庫，請檢查網絡後重新整理。';}
+else{
+ db = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY
+);
+
+// This test is informational only. A 401/403 is a server response, not a network failure.
+// Avoid calling this on every page load: browser/CORS behaviour may mislead diagnostics.
+async function testConnection() {
+  try {
+    const response = await fetch(SUPABASE_URL + '/auth/v1/health', {
+      method: 'GET', cache: 'no-store',
+      headers: { apikey: SUPABASE_PUBLISHABLE_KEY }
+    });
+    return 'Supabase 已回應（HTTP ' + response.status + '）。';
+  } catch (_) {
+    return '瀏覽器無法連接 Supabase。請檢查網絡、VPN、內容阻擋器或 Safari 設定。';
+  }
+}
+async function startApp() {
+  show('login');
+  try { await refreshAuth(); }
+  catch (_) { show('login'); say('loginMessage', '無法檢查登入狀態，請檢查網絡連線後重試。'); }
+}
+startApp();
+ db.auth.onAuthStateChange((event)=>{if(event==='SIGNED_OUT'){currentUser=null;students=[];resetForm();show('login');}});
+ $('loginForm').addEventListener('submit',async e=>{
+  e.preventDefault();if(signingIn)return;signingIn=true;$('loginButton').disabled=true;say('loginMessage','正在登入…');
+  try {
+    const {data,error}=await timeout(db.auth.signInWithPassword({
+      email:$('email').value.trim(),password:$('password').value
+    }));
+    if(error) {
+      const network = /load failed|failed to fetch|network|fetch failed/i.test(error.message || '');
+      say('loginMessage', network
+        ? '無法連接登入服務。請檢查 Safari 網絡、VPN、內容阻擋器，再重試。'
+        : '登入失敗：' + error.message);
+      return;
+    }
+    if(!data?.user) { say('loginMessage','未收到有效登入結果，請重試。'); return; }
+    $('password').value='';
+    say('loginMessage','');
+    await refreshAuth();
+  } catch (_) {
+    say('loginMessage','登入請求失敗（網絡或瀏覽器問題）。請檢查連線後重試。');
+  } finally {
+    $('loginButton').disabled=false;signingIn=false;
+  }
+ });
+ $('logoutButton').addEventListener('click',async()=>{try{const {error}=await timeout(db.auth.signOut());if(error)throw error;currentUser=null;students=[];resetForm();show('login');}catch(err){alert('登出失敗：'+errorText(err));}});
+ $('refreshButton').addEventListener('click',loadStudents);
+ $('searchStudents').addEventListener('input',displayStudents);
+ $('filterStatus').addEventListener('change',displayStudents);
+ $('exportButton').addEventListener('click',()=>{
+   if(!currentUser){alert('請先登入');return;}
+   if(loadingStudents||!students.length){alert('資料尚未完整載入，請重新整理後再匯出。');return;}
+   // CSV escapes spreadsheet formula injection and commas/quotes/newlines.
+   const cell=v=>{const raw=String(v??'');const safe=/^[\s\u0000-\u001f]*[=+@-]/.test(raw)?"'"+raw:raw;return '"'+safe.replace(/"/g,'""')+'"';};
+   const rows=[['姓名','班別','每月學費 (HKD)','入學日期','狀態','備註'],...students.map(s=>[s.student_name,s.class_name,s.monthly_fee,s.enrollment_date,s.status==='active'?'在讀':'停讀',s.notes])];
+   const csv='\uFEFF'+rows.map(r=>r.map(cell).join(',')).join('\r\n');
+   const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+   const link=document.createElement('a');link.href=url;link.download='tkd-students-'+new Date().toISOString().slice(0,10)+'.csv';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);
+ });
+ $('cancelButton').addEventListener('click',()=>{resetForm();say('studentMessage','');});
+ $('studentForm').addEventListener('submit',async e=>{
+  e.preventDefault(); if(savingStudent || !currentUser)return;
+  const payload={student_name:$('studentName').value.trim(),class_name:$('className').value.trim()||null,monthly_fee:Number($('fee').value),enrollment_date:$('enrollment').value||null,status:$('status').value,notes:$('notes').value.trim()||null};
+  if(!payload.student_name||!$('fee').value.trim()||!Number.isFinite(payload.monthly_fee)||payload.monthly_fee<0||!['active','inactive'].includes(payload.status)){
+   say('studentMessage','請檢查姓名、學費及狀態。');return;
+  }
+  savingStudent=true;$('saveButton').disabled=true;$('cancelButton').disabled=true;
+  say('studentMessage','正在儲存…');
+  try{
+   const query=editingId?db.from('students').update(payload).eq('id',editingId):db.from('students').insert(payload);
+   const {error}=await timeout(query);
+   if(error)throw error;
+   resetForm();say('studentMessage','已成功儲存學生。',true);
+   await loadStudents();
+  }catch(err){
+   say('studentMessage', '儲存未能確認：'+errorText(err)+' 如遇逾時，請先重新整理名單確認是否已儲存，避免重複新增。');
+  }finally{savingStudent=false;$('saveButton').disabled=false;$('cancelButton').disabled=false;}
+ });;
+}
+</script>
+</body>
+</html>
