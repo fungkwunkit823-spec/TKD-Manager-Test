@@ -95,7 +95,22 @@ async function loadStudents(){
 }
 async function refreshAuth(){
  const {data,error}=await timeout(db.auth.getUser());
- if(error || !data?.user){currentUser=null;students=[];show('login');if(error) say('loginMessage','無法驗證登入狀態：'+errorText(error));return;}
+ if(error || !data?.user){
+  currentUser=null;
+  students=[];
+  show('login');
+
+  const missingSession =
+    error?.name === 'AuthSessionMissingError' ||
+    /auth session missing/i.test(error?.message || '');
+
+  if(error && !missingSession){
+    say('loginMessage','無法驗證登入狀態：'+errorText(error));
+  } else {
+    say('loginMessage','');
+  }
+  return;
+}
  if(data.user.id!==ADMIN_UID){
   currentUser=null;students=[];show('login');say('loginMessage','此帳戶未獲管理員授權，請使用指定管理員帳戶。');
   await timeout(db.auth.signOut()).catch(()=>{}); return;
